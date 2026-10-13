@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS readings (
     flow_l_min NUMERIC(10,2) NOT NULL
         CHECK (flow_l_min >= 0 AND flow_l_min <= 500),
     volume_liters NUMERIC(12,2) NOT NULL
-        CHECK (volume_liters > 0 AND volume_liters <= 10000),
+        CHECK (volume_liters >= 0 AND volume_liters <= 10000),
     source VARCHAR(20) NOT NULL
         CHECK (source IN ('manual', 'iot', 'simulador')),
     created_by_user_id BIGINT
@@ -84,6 +84,17 @@ CREATE TABLE IF NOT EXISTS alerts (
         (status = 'resuelta' AND resolved_at IS NOT NULL)
     )
 );
+
+-- Migración idempotente para instalaciones creadas con la primera versión del esquema.
+-- La telemetría real debe admitir periodos sin consumo: 0 L/min y 0 L.
+ALTER TABLE readings DROP CONSTRAINT IF EXISTS readings_flow_l_min_check;
+ALTER TABLE readings
+    ADD CONSTRAINT readings_flow_l_min_check
+    CHECK (flow_l_min >= 0 AND flow_l_min <= 500);
+ALTER TABLE readings DROP CONSTRAINT IF EXISTS readings_volume_liters_check;
+ALTER TABLE readings
+    ADD CONSTRAINT readings_volume_liters_check
+    CHECK (volume_liters >= 0 AND volume_liters <= 10000);
 
 CREATE INDEX IF NOT EXISTS idx_users_household
     ON users(household_id);
