@@ -1,0 +1,61 @@
+erDiagram
+    HOUSEHOLDS ||--o{ USERS : contiene
+    HOUSEHOLDS ||--|| SENSORS : posee
+    SENSORS ||--o{ READINGS : genera
+    USERS o|--o{ READINGS : registra
+    HOUSEHOLDS ||--o{ ALERTS : recibe
+    READINGS o|--o{ ALERTS : origina
+
+    HOUSEHOLDS {
+        BIGINT id PK
+        VARCHAR name
+        NUMERIC daily_goal_liters
+        NUMERIC anomaly_threshold_percent
+        NUMERIC leak_flow_threshold_l_min
+        INTEGER leak_duration_minutes
+        TIMESTAMPTZ created_at
+    }
+    USERS {
+        BIGINT id PK
+        BIGINT household_id FK
+        VARCHAR name
+        VARCHAR email UK
+        TEXT password_hash
+        VARCHAR role
+        BOOLEAN active
+        TIMESTAMPTZ created_at
+    }
+    SENSORS {
+        BIGINT id PK
+        BIGINT household_id FK_UK
+        VARCHAR code UK
+        VARCHAR name
+        VARCHAR sensor_type
+        VARCHAR installation_point
+        BOOLEAN active
+        TIMESTAMPTZ installed_at
+        TIMESTAMPTZ created_at
+    }
+    READINGS {
+        BIGINT id PK
+        BIGINT sensor_id FK
+        TIMESTAMPTZ recorded_at
+        NUMERIC flow_l_min
+        NUMERIC volume_liters
+        VARCHAR source
+        BIGINT created_by_user_id FK
+        TIMESTAMPTZ created_at
+    }
+    ALERTS {
+        BIGINT id PK
+        BIGINT household_id FK
+        BIGINT reading_id FK
+        VARCHAR alert_type
+        VARCHAR severity
+        VARCHAR title
+        TEXT message
+        DATE alert_date
+        VARCHAR status
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ resolved_at
+    }

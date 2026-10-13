@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Acceso | AquaHogar{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block body %}
+<main class="auth-layout">
+  <section class="auth-intro">
+    <a class="brand" href="{{ url_for('main.home') }}"><img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Logo"><span>AquaHogar</span></a>
+    <div><span class="eyebrow">Acceso seguro</span><h1>Monitorea, comprende y mejora tu consumo de agua.</h1><p>Las cuentas permiten separar los datos por hogar y conservar el historial en PostgreSQL.</p></div>
+    <a href="{{ url_for('main.home') }}" class="text-link">← Volver al inicio</a>
+  </section>
+  <section class="auth-panel">
+    {% include "partials/flashes.html" %}
+    <div class="auth-tabs"><a class="{% if mode!='register' %}active{% endif %}" href="{{ url_for('auth.auth', modo='login') }}">Iniciar sesión</a><a class="{% if mode=='register' %}active{% endif %}" href="{{ url_for('auth.auth', modo='register') }}">Crear cuenta</a></div>
+    {% if mode == 'register' %}
+      <form method="post" class="form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="register">
+        <div class="field"><label for="name">Nombre completo</label><input id="name" name="name" maxlength="120" autocomplete="name" required></div>
+        <div class="field"><label for="email">Correo electrónico</label><input id="email" name="email" type="email" maxlength="180" autocomplete="email" required></div>
+        <div class="field"><label for="password">Contraseña</label><input id="password" name="password" type="password" minlength="8" autocomplete="new-password" required><small>Mínimo 8 caracteres, con letras y números.</small></div>
+        <button class="btn full" type="submit">Crear cuenta</button>
+      </form>
+    {% else %}
+      <form method="post" class="form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="login">
+        <div class="field"><label for="email">Correo electrónico</label><input id="email" name="email" type="email" maxlength="180" autocomplete="email" required></div>
+        <div class="field"><label for="password">Contraseña</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
+        <button class="btn full" type="submit">Ingresar</button>
+      </form>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

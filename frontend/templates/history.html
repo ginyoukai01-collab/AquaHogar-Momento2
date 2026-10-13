@@ -1,0 +1,7 @@
+{% extends "app_base.html" %}
+{% set active='historial' %}
+{% block title %}Historial | AquaHogar{% endblock %}
+{% block content %}
+<header class="page-head"><div><span class="eyebrow">Trazabilidad</span><h1>Historial de consumo</h1><p>Consulta de las mediciones registradas por el caudalímetro de la acometida principal.</p></div></header>
+<section class="card"><div class="table-toolbar"><input id="tableFilter" type="search" placeholder="Filtrar por fecha, sensor u origen…" aria-label="Filtrar historial"><span class="tag">{{ readings|length }} registros</span></div><div class="table-wrap"><table id="historyTable"><thead><tr><th>Fecha</th><th>Sensor</th><th>Instalación</th><th>Flujo</th><th>Volumen</th><th>Origen</th></tr></thead><tbody>{% for r in readings %}<tr><td>{{ r.recorded_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ r.sensor_code }}</td><td>Acometida principal</td><td>{{ r.flow_l_min }} L/min</td><td><strong>{{ r.volume_liters }} L</strong></td><td>{{ r.source }}</td></tr>{% else %}<tr><td colspan="6" class="empty">Sin lecturas registradas.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

@@ -1,0 +1,36 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs / runtime
+*.log
+*.pid
+instance/
+
+# Build
+node_modules/
+dist/
+build/
+
+# Local DB / dumps generated outside the official database folder
+*.sqlite
+*.sqlite3
+*.db
+*.dump

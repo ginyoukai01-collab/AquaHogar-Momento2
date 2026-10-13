@@ -1,0 +1,22 @@
+{% extends "app_base.html" %}
+{% set active='dashboard' %}
+{% block title %}Panel principal | AquaHogar{% endblock %}
+{% block head %}<script>window.AQ_SUMMARY={{ summary|tojson }};</script>{% endblock %}
+{% block content %}
+<header class="page-head"><div><span class="eyebrow">{{ household.name }}</span><h1>Panel principal</h1><p>Monitoreo centralizado del consumo total de agua medido en la acometida principal.</p></div><a class="btn" href="{{ url_for('main.new_reading') }}">Registrar lectura</a></header>
+<section class="grid grid-4 metrics">
+  <article class="card metric"><span>Consumo actual</span><strong>{{ '%.0f'|format(summary.today) }} L</strong><small>Último día con registros</small></article>
+  <article class="card metric"><span>Últimos 7 días</span><strong>{{ '%.0f'|format(summary.week) }} L</strong><small>Consumo total del inmueble</small></article>
+  <article class="card metric"><span>Variación</span><strong class="{{ 'danger-text' if summary.delta>10 else 'ok-text' }}">{{ '%+.1f'|format(summary.delta) }}%</strong><small>Vs. línea base reciente</small></article>
+  <article class="card metric"><span>Estado</span><strong class="status-text {{ summary.status }}">{{ summary.status|capitalize }}</strong><small>{{ 'Sensor activo' if sensor and sensor.active else 'Sensor inactivo' }}</small></article>
+</section>
+<section class="grid dashboard-grid">
+  <article class="card"><div class="card-head"><div><h2>Tendencia diaria</h2><p>Litros totales que ingresaron al inmueble por día.</p></div></div><div class="chart-wrap"><canvas id="dailyChart" aria-label="Gráfica de consumo diario"></canvas></div></article>
+  <article class="card"><div class="card-head"><div><h2>Patrón por hora</h2><p>Distribución del consumo según la hora registrada.</p></div></div><div class="chart-wrap"><canvas id="hourlyChart" aria-label="Gráfica de consumo por hora"></canvas></div></article>
+</section>
+<section class="grid dashboard-grid">
+  <article class="card"><div class="card-head"><h2>Alertas recientes</h2><a href="{{ url_for('main.management') }}">Gestionar</a></div>{% if alerts %}<div class="alert-list">{% for a in alerts %}<div class="alert-item {{ a.severity }}"><div><strong>{{ a.title }}</strong><p>{{ a.message }}</p></div><span class="status-badge {{ 'resolved' if a.status=='resuelta' else a.severity }}">{{ a.status }}</span></div>{% endfor %}</div>{% else %}<div class="empty">No hay alertas registradas.</div>{% endif %}</article>
+  <article class="card"><h2>Impacto estimado</h2><p class="muted">Indicadores académicos derivados del ahorro potencial frente a la meta diaria.</p><div class="impact-metrics"><div><span>Ahorro potencial</span><strong>{{ '%.1f'|format(summary.potential_saving_liters) }} L</strong></div><div><span>Energía asociada</span><strong>{{ '%.4f'|format(summary.estimated_energy_kwh) }} kWh</strong></div><div><span>CO₂e estimado</span><strong>{{ '%.4f'|format(summary.estimated_co2_kg) }} kg</strong></div></div></article>
+</section>
+<section class="card"><div class="card-head"><div><h2>Últimas lecturas</h2><p>Información capturada por el caudalímetro principal y persistida en PostgreSQL.</p></div><a href="{{ url_for('main.history') }}">Ver historial</a></div><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Sensor</th><th>Punto de instalación</th><th>Volumen</th><th>Flujo</th><th>Origen</th></tr></thead><tbody>{% for r in readings %}<tr><td>{{ r.recorded_at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ r.sensor_code }}</td><td>Acometida principal</td><td><strong>{{ r.volume_liters }} L</strong></td><td>{{ r.flow_l_min }} L/min</td><td><span class="tag">{{ r.source }}</span></td></tr>{% else %}<tr><td colspan="6" class="empty">Aún no hay lecturas. Registra la primera medición.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}AquaHogar | ODS 13{% endblock %}
+{% block body %}
+<header class="landing-header">
+  <div class="container nav">
+    <a class="brand" href="{{ url_for('main.home') }}"><img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Logo AquaHogar"><span>AquaHogar</span></a>
+    <nav class="nav-links"><a href="#problema">Problema</a><a href="#solucion">Solución</a><a href="#ods">ODS 13</a><a class="btn small-btn" href="{{ url_for('auth.auth') }}">Ingresar</a></nav>
+  </div>
+</header>
+<main>
+  <section class="container hero">
+    <div class="hero-copy">
+      <span class="eyebrow">ODS 13 · Acción por el clima · IoT + datos</span>
+      <h1>Monitoreo total del agua del hogar con una instalación simple.</h1>
+      <p>AquaHogar utiliza un único caudalímetro instalado en la acometida principal para registrar el agua que ingresa al inmueble, visualizar el consumo diario y detectar cambios anómalos o posibles fugas generales.</p>
+      <div class="hero-actions"><a class="btn" href="{{ url_for('auth.auth') }}">Probar AquaHogar</a><a class="btn ghost" href="#solucion">Conocer la solución</a></div>
+      <div class="trust-row"><span>✓ Un sensor por hogar</span><span>✓ Persistencia PostgreSQL</span><span>✓ Integración ESP32</span></div>
+    </div>
+    <div class="hero-dashboard card">
+      <span class="status-badge normal">Monitoreo activo</span>
+      <p class="muted">Ejemplo de consumo total diario</p><div class="hero-number">256 L</div><div class="progress"><span style="width:72%"></span></div>
+      <div class="mini-grid"><div><small>Meta</small><strong>310 L</strong></div><div><small>Tendencia</small><strong>−14%</strong></div><div><small>Estado</small><strong>Normal</strong></div></div>
+    </div>
+  </section>
+  <section class="container section" id="problema"><div class="section-heading"><span class="eyebrow">Problemática</span><h2>El desperdicio puede pasar desapercibido sin una medición continua del consumo total.</h2></div><div class="grid grid-3"><article class="card"><h3>Poca visibilidad</h3><p>El usuario suele conocer su consumo cuando llega la factura y no mientras ocurre.</p></article><article class="card"><h3>Fugas generales</h3><p>Un flujo persistente puede permanecer activo durante horas sin que el hogar lo identifique oportunamente.</p></article><article class="card"><h3>Instalaciones costosas</h3><p>Instrumentar cada grifo aumenta hardware, mantenimiento y la intervención sobre la red interna.</p></article></div></section>
+  <section class="container section" id="solucion"><div class="section-heading"><span class="eyebrow">Solución</span><h2>Una arquitectura centralizada: medir una vez, analizar todo el consumo.</h2></div><div class="flow"><div><b>1</b><strong>Caudalímetro</strong><span>Acometida principal</span></div><i>→</i><div><b>2</b><strong>ESP32</strong><span>Captura y transmite</span></div><i>→</i><div><b>3</b><strong>API + PostgreSQL</strong><span>Valida y persiste</span></div><i>→</i><div><b>4</b><strong>Análisis</strong><span>Anomalías y fugas</span></div><i>→</i><div><b>5</b><strong>Dashboard</strong><span>Alertas y reportes</span></div></div></section>
+  <section class="container section" id="ods"><div class="split"><div><span class="eyebrow">ODS 13</span><h2>Acción climática desde el uso responsable de recursos</h2><p>La propuesta promueve sensibilización y consumo eficiente. AquaHogar no presenta el ahorro de agua como una medición directa de reducción de emisiones; los indicadores de energía y CO₂e se mantienen como estimaciones académicas separadas de los datos reales de consumo.</p></div><div class="card impact-card"><strong>Impacto esperado</strong><ul><li>Mayor conocimiento del consumo total del hogar.</li><li>Detección más temprana de comportamientos anómalos.</li><li>Instalación de menor costo y menor intervención física.</li><li>Base tecnológica extensible a telemetría real.</li></ul></div></div></section>
+</main>
+<footer class="footer"><div class="container">AquaHogar · Proyecto académico de Ingeniería de Sistemas · ODS 13</div></footer>
+{% endblock %}

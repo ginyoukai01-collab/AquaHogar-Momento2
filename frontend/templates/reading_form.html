@@ -1,0 +1,17 @@
+{% extends "app_base.html" %}
+{% set active='registro' %}
+{% block title %}Registrar datos | AquaHogar{% endblock %}
+{% block content %}
+<header class="page-head"><div><span class="eyebrow">Ingreso de datos</span><h1>Registrar lectura</h1><p>Formulario de respaldo para simular o ingresar una lectura del único caudalímetro de la acometida principal.</p></div></header>
+<section class="card form-card">
+  {% if sensor and sensor.active %}
+  <div class="list-row"><div><strong>{{ sensor.name }}</strong><small>{{ sensor.code }}</small></div><span class="tag">Acometida principal</span></div>
+  <form method="post" class="form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid grid-2"><div class="field"><label for="date">Fecha</label><input id="date" name="date" type="date" value="{{ now.strftime('%Y-%m-%d') }}" required></div><div class="field"><label for="time">Hora</label><input id="time" name="time" type="time" value="{{ now.strftime('%H:%M') }}" required></div></div>
+    <div class="grid grid-2"><div class="field"><label for="flow">Caudal (L/min)</label><input id="flow" name="flow" type="number" min="0.01" max="500" step="0.01" required><small>Flujo medido en la entrada general del inmueble.</small></div><div class="field"><label for="volume">Volumen acumulado (L)</label><input id="volume" name="volume" type="number" min="0.01" max="10000" step="0.01" required><small>Volumen registrado durante el intervalo o evento de medición.</small></div></div>
+    <button class="btn" type="submit">Guardar en PostgreSQL</button>
+  </form>
+  {% else %}<div class="empty"><strong>El caudalímetro principal no está activo.</strong><p>Un administrador debe habilitarlo desde Gestión antes de registrar lecturas.</p><a class="btn" href="{{ url_for('main.management') }}">Ir a gestión</a></div>{% endif %}
+</section>
+<section class="card info-card"><h2>Integración IoT</h2><p>En la implementación física, el ESP32 conectado al caudalímetro de la acometida principal envía los mismos datos a <code>POST /api/iot/lecturas</code> usando JSON y la cabecera <code>X-AquaHogar-Key</code>. No se requieren sensores adicionales en duchas, grifos o sanitarios.</p></section>
+{% endblock %}

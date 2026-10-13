@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} | AquaHogar{% endblock %}
+{% block body %}<main class="error-page"><a class="brand" href="{{ url_for('main.home') }}"><img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Logo"><span>AquaHogar</span></a><div class="error-card"><span class="error-code">{{ code }}</span><h1>{{ title }}</h1><p>{{ message }}</p><a class="btn" href="{{ url_for('main.home') }}">Volver al inicio</a></div></main>{% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('main.dashboard') }}">
+      <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Logo AquaHogar">
+      <span>AquaHogar</span>
+    </a>
+    <nav class="side-nav" aria-label="Navegación principal">
+      <a class="side-link {% if active=='dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">Panel principal</a>
+      <a class="side-link {% if active=='gestion' %}active{% endif %}" href="{{ url_for('main.management') }}">Gestión</a>
+      <a class="side-link {% if active=='registro' %}active{% endif %}" href="{{ url_for('main.new_reading') }}">Registrar datos</a>
+      <a class="side-link {% if active=='historial' %}active{% endif %}" href="{{ url_for('main.history') }}">Historial</a>
+      <a class="side-link {% if active=='reportes' %}active{% endif %}" href="{{ url_for('main.reports') }}">Resultados y reportes</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <span class="user-avatar">{{ session.get('user_name','U')[0]|upper }}</span>
+        <div><strong>{{ session.get('user_name','Usuario') }}</strong><small>{{ 'Administrador' if session.get('role')=='admin' else 'Usuario' }}</small></div>
+      </div>
+      <form action="{{ url_for('auth.logout') }}" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="side-link logout" type="submit">Cerrar sesión</button></form>
+    </div>
+  </aside>
+  <main class="main">
+    <button class="mobile-menu" type="button" data-menu-toggle aria-label="Abrir menú">☰</button>
+    {% include "partials/flashes.html" %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% endblock %}

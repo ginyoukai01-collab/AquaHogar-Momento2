@@ -1,0 +1,77 @@
+Project AquaHogar {
+  database_type: 'PostgreSQL'
+  Note: 'ODS 13 - Monitoreo centralizado del consumo total de agua. Un caudalimetro por inmueble.'
+}
+
+Table households {
+  id bigint [pk, increment]
+  name varchar(120) [not null]
+  daily_goal_liters numeric(10,2) [not null, default: 310]
+  anomaly_threshold_percent numeric(5,2) [not null, default: 20]
+  leak_flow_threshold_l_min numeric(8,2) [not null, default: 0.30]
+  leak_duration_minutes int [not null, default: 30]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table users {
+  id bigint [pk, increment]
+  household_id bigint [not null]
+  name varchar(120) [not null]
+  email varchar(180) [not null, unique]
+  password_hash text [not null]
+  role varchar(20) [not null, default: 'usuario', note: 'admin | usuario']
+  active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table sensors {
+  id bigint [pk, increment]
+  household_id bigint [not null, unique, note: 'Relacion 1:1 con el hogar']
+  code varchar(80) [not null, unique]
+  name varchar(100) [not null, default: 'Caudalimetro principal']
+  sensor_type varchar(30) [not null, default: 'flujo']
+  installation_point varchar(60) [not null, default: 'acometida_principal']
+  active boolean [not null, default: true]
+  installed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+}
+
+Table readings {
+  id bigint [pk, increment]
+  sensor_id bigint [not null]
+  recorded_at timestamptz [not null]
+  flow_l_min numeric(10,2) [not null]
+  volume_liters numeric(12,2) [not null]
+  source varchar(20) [not null, note: 'manual | iot | simulador']
+  created_by_user_id bigint
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (sensor_id, recorded_at, source) [unique]
+  }
+}
+
+Table alerts {
+  id bigint [pk, increment]
+  household_id bigint [not null]
+  reading_id bigint
+  alert_type varchar(30) [not null, note: 'consumo_inusual | posible_fuga']
+  severity varchar(20) [not null, note: 'media | alta']
+  title varchar(140) [not null]
+  message text [not null]
+  alert_date date [not null]
+  status varchar(20) [not null, default: 'activa', note: 'activa | resuelta']
+  created_at timestamptz [not null, default: `now()`]
+  resolved_at timestamptz
+
+  indexes {
+    (household_id, alert_type, alert_date) [unique]
+  }
+}
+
+Ref: users.household_id > households.id [delete: cascade]
+Ref: sensors.household_id - households.id [delete: cascade]
+Ref: readings.sensor_id > sensors.id [delete: restrict]
+Ref: readings.created_by_user_id > users.id [delete: set null]
+Ref: alerts.household_id > households.id [delete: cascade]
+Ref: alerts.reading_id > readings.id [delete: set null]
