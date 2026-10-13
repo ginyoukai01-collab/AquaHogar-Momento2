@@ -5,7 +5,7 @@ Proyecto universitario - Ingeniería de Sistemas - Universidad Cooperativa de Co
 **ODS 13: Acción por el Clima**
 
 > Repositorio GitHub: `https://github.com/ginyoukai01-collab/AquaHogar-Momento2`  
-> Aplicación desplegada: `PENDIENTE_URL_RENDER`
+> Aplicación desplegada: `https://aquahogar-web.onrender.com`
 
 ## 1. Descripción
 
@@ -161,6 +161,12 @@ Abrir `http://127.0.0.1:5000`.
 GET /api/health
 ```
 
+En producción:
+
+```text
+https://aquahogar-web.onrender.com/api/health
+```
+
 ### Nueva lectura
 
 ```http
@@ -193,7 +199,11 @@ El modelo PostgreSQL se encuentra en `/database` y está normalizado al menos a 
 
 ## 11. Despliegue
 
-Consultar [`docs/DESPLIEGUE_RENDER.md`](docs/DESPLIEGUE_RENDER.md). `render.yaml` permite crear el servicio web y PostgreSQL como infraestructura declarativa.
+La versión pública se encuentra en:
+
+`https://aquahogar-web.onrender.com`
+
+Consultar [`docs/DESPLIEGUE_RENDER.md`](docs/DESPLIEGUE_RENDER.md). `render.yaml` documenta la infraestructura prevista para el servicio web y PostgreSQL.
 
 ## 12. Pruebas
 
