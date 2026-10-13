@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, current_app, session
 
 from backend.db import fetch_one, fetch_all
 from backend.services.readings import create_reading
-from backend.validation import positive_float
+from backend.validation import nonnegative_float
 
 api_bp = Blueprint("api", __name__)
 
@@ -67,8 +67,10 @@ def iot_reading():
             return jsonify({"error": "Caudalímetro principal no encontrado"}), 404
 
         recorded_at = datetime.fromisoformat(body.get("recorded_at")) if body.get("recorded_at") else datetime.now()
-        flow = positive_float(body.get("flow_l_min"), "flow_l_min", 500)
-        volume = positive_float(body.get("volume_liters"), "volume_liters", 10000)
+        # Un caudalímetro real debe poder reportar periodos sin consumo.
+        # Por eso 0 L/min y 0 L son lecturas válidas en la telemetría IoT.
+        flow = nonnegative_float(body.get("flow_l_min"), "flow_l_min", 500)
+        volume = nonnegative_float(body.get("volume_liters"), "volume_liters", 10000)
         reading = create_reading(
             household_id=sensor["household_id"],
             sensor_id=sensor["id"],
