@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Arquitectura centralizada: exactamente un caudalimetro principal por hogar.
 CREATE TABLE IF NOT EXISTS sensors (
     id BIGSERIAL PRIMARY KEY,
     household_id BIGINT NOT NULL UNIQUE
@@ -67,7 +66,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     reading_id BIGINT
         REFERENCES readings(id) ON UPDATE CASCADE ON DELETE SET NULL,
     alert_type VARCHAR(30) NOT NULL
-        CHECK (alert_type IN ('consumo_inusual', 'posible_fuga')),
+        CHECK (alert_type IN ('consumo_inusual', 'posible_fuga', 'anomalia_modelo')),
     severity VARCHAR(20) NOT NULL
         CHECK (severity IN ('media', 'alta')),
     title VARCHAR(140) NOT NULL,
@@ -85,8 +84,6 @@ CREATE TABLE IF NOT EXISTS alerts (
     )
 );
 
--- Extensiones para el requerimiento avanzado MQTT. Son aditivas para no romper
--- instalaciones existentes ni el flujo HTTP durante la migracion.
 ALTER TABLE readings
     ADD COLUMN IF NOT EXISTS origen_mqtt BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -121,8 +118,6 @@ CREATE TABLE IF NOT EXISTS comandos (
     confirmado_en TIMESTAMPTZ
 );
 
--- Migración idempotente para instalaciones creadas con la primera versión del esquema.
--- La telemetría real debe admitir periodos sin consumo: 0 L/min y 0 L.
 ALTER TABLE readings DROP CONSTRAINT IF EXISTS readings_flow_l_min_check;
 ALTER TABLE readings
     ADD CONSTRAINT readings_flow_l_min_check
@@ -132,8 +127,6 @@ ALTER TABLE readings
     ADD CONSTRAINT readings_volume_liters_check
     CHECK (volume_liters >= 0 AND volume_liters <= 10000);
 
--- Las restricciones de texto se agregan como constraints nombradas cuando no existen.
--- Se mantienen separadas de ADD COLUMN IF NOT EXISTS para soportar bases ya creadas.
 ALTER TABLE sensors DROP CONSTRAINT IF EXISTS sensors_estado_valvula_check;
 ALTER TABLE sensors
     ADD CONSTRAINT sensors_estado_valvula_check
@@ -143,6 +136,11 @@ ALTER TABLE alerts DROP CONSTRAINT IF EXISTS alerts_origen_check;
 ALTER TABLE alerts
     ADD CONSTRAINT alerts_origen_check
     CHECK (origen IN ('regla', 'modelo'));
+
+ALTER TABLE alerts DROP CONSTRAINT IF EXISTS alerts_alert_type_check;
+ALTER TABLE alerts
+    ADD CONSTRAINT alerts_alert_type_check
+    CHECK (alert_type IN ('consumo_inusual', 'posible_fuga', 'anomalia_modelo'));
 
 CREATE INDEX IF NOT EXISTS idx_users_household
     ON users(household_id);
