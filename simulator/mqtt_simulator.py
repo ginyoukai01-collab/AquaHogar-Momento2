@@ -22,6 +22,9 @@ HOUSEHOLD_ID = int(os.getenv("MQTT_HOUSEHOLD_ID", "1"))
 CLIENT_ID = os.getenv("MQTT_SIMULATOR_CLIENT_ID", f"aquahogar-simulador-{HOUSEHOLD_ID}")
 INTERVAL_SECONDS = float(os.getenv("MQTT_SIMULATOR_INTERVAL_SECONDS", "1"))
 STEP_MINUTES = int(os.getenv("MQTT_SIMULATOR_STEP_MINUTES", "10"))
+MAX_STEPS = int(os.getenv("MQTT_SIMULATOR_MAX_STEPS", "0"))
+START_ISO = (os.getenv("MQTT_SIMULATOR_START_ISO") or "").strip()
+START_DAYS_AGO = float(os.getenv("MQTT_SIMULATOR_START_DAYS_AGO", "0"))
 LEAK_ENABLED = (os.getenv("MQTT_SIMULATOR_LEAK_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"})
 LEAK_START_HOUR = int(os.getenv("MQTT_SIMULATOR_LEAK_START_HOUR", "3"))
 LEAK_FLOW = float(os.getenv("MQTT_SIMULATOR_LEAK_FLOW_L_MIN", "2.0"))
@@ -36,8 +39,18 @@ if not HOST or not USER or not PASSWORD:
         "Configura MQTT_HOST, MQTT_DEVICE_USER y MQTT_DEVICE_PASS antes de ejecutar el simulador."
     )
 
+
+def initial_simulated_time():
+    if START_ISO:
+        value = datetime.fromisoformat(START_ISO)
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=TZ)
+        return value.astimezone(TZ).replace(second=0, microsecond=0)
+    return (datetime.now(TZ) - timedelta(days=START_DAYS_AGO)).replace(second=0, microsecond=0)
+
+
 valve_state = "abierta"
-simulated_time = datetime.now(TZ).replace(second=0, microsecond=0)
+simulated_time = initial_simulated_time()
 
 
 def realistic_flow(ts):
@@ -151,12 +164,15 @@ def main():
 
     print("Simulador AquaHogar MQTT iniciado. Ctrl+C para detener.")
     print(
-        f"Tiempo simulado: +{STEP_MINUTES} min cada {INTERVAL_SECONDS}s reales | "
+        f"Inicio={simulated_time.isoformat(timespec='minutes')} | "
+        f"+{STEP_MINUTES} min cada {INTERVAL_SECONDS}s reales | "
+        f"pasos={'sin límite' if MAX_STEPS <= 0 else MAX_STEPS} | "
         f"fuga={'sí' if LEAK_ENABLED else 'no'}"
     )
 
+    steps = 0
     try:
-        while True:
+        while MAX_STEPS <= 0 or steps < MAX_STEPS:
             flow = realistic_flow(simulated_time)
             volume = round(flow * (STEP_MINUTES / 60), 3)
             payload = {
@@ -168,7 +184,9 @@ def main():
             info.wait_for_publish(timeout=5)
             print(simulated_time.isoformat(timespec="minutes"), payload)
             simulated_time += timedelta(minutes=STEP_MINUTES)
-            time.sleep(INTERVAL_SECONDS)
+            steps += 1
+            if MAX_STEPS <= 0 or steps < MAX_STEPS:
+                time.sleep(INTERVAL_SECONDS)
     except KeyboardInterrupt:
         print("Deteniendo simulador...")
     finally:
@@ -176,6 +194,7 @@ def main():
         time.sleep(0.2)
         client.disconnect()
         client.loop_stop()
+        print(f"Simulador finalizado tras {steps} lecturas.")
 
 
 if __name__ == "__main__":
