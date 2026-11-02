@@ -1,3 +1,4 @@
+import os
 import pickle
 from datetime import timedelta
 
@@ -15,8 +16,12 @@ FEATURE_COLUMNS = [
     "hora",
     "fin_semana",
 ]
-MIN_WINDOWS = 7 * 96
+MIN_WINDOWS = int(os.getenv("ML_MIN_WINDOWS", str(7 * 96)))
 MODEL_VERSION = 1
+
+
+def ml_enabled():
+    return (os.getenv("ML_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
 
 
 def _rows_for_household(household_id):
@@ -56,7 +61,6 @@ def _feature_frame(rows):
         caudal_min=("flow_l_min", "min"),
         caudal_max=("flow_l_min", "max"),
     )
-    # No inventar ventanas donde no hubo telemetría.
     windows = windows.dropna(subset=["caudal_medio", "caudal_min", "caudal_max"])
     windows["hora"] = windows.index.hour + (windows.index.minute / 60.0)
     windows["fin_semana"] = (windows.index.dayofweek >= 5).astype(int)
@@ -64,12 +68,16 @@ def _feature_frame(rows):
 
 
 def model_status(household_id):
+    if not ml_enabled():
+        return {"enabled": False, "trained": False, "required": MIN_WINDOWS}
+
     row = fetch_one(
         "SELECT muestras, entrenado_en FROM modelos_anomalia WHERE household_id=%s",
         (household_id,),
     )
     if row:
         return {
+            "enabled": True,
             "trained": True,
             "samples": int(row["muestras"]),
             "trained_at": row["entrenado_en"],
@@ -78,6 +86,7 @@ def model_status(household_id):
     rows = _rows_for_household(household_id)
     windows = _feature_frame(rows)
     return {
+        "enabled": True,
         "trained": False,
         "samples": len(windows),
         "required": MIN_WINDOWS,
@@ -85,10 +94,14 @@ def model_status(household_id):
 
 
 def train_household_model(household_id):
+    if not ml_enabled():
+        return {"enabled": False, "trained": False}
+
     rows = _rows_for_household(household_id)
     windows = _feature_frame(rows)
     if len(windows) < MIN_WINDOWS:
         return {
+            "enabled": True,
             "trained": False,
             "samples": len(windows),
             "required": MIN_WINDOWS,
@@ -119,7 +132,7 @@ def train_household_model(household_id):
         """,
         (household_id, payload, len(windows)),
     )
-    return {"trained": True, "samples": len(windows)}
+    return {"enabled": True, "trained": True, "samples": len(windows)}
 
 
 def _load_model(household_id):
@@ -174,19 +187,21 @@ def _explanation(window):
 
 
 def evaluate_latest_window(household_id, reading):
+    if not ml_enabled():
+        return {"enabled": False, "evaluated": False, "trained": False}
+
     bundle = _load_model(household_id)
     if bundle is None:
-        # Entrenar automáticamente cuando ya exista una semana completa de ventanas.
         training = train_household_model(household_id)
         if not training.get("trained"):
             return {"evaluated": False, **training}
         bundle = _load_model(household_id)
         if bundle is None:
-            return {"evaluated": False, "trained": False}
+            return {"enabled": True, "evaluated": False, "trained": False}
 
     window = _latest_window(household_id, reading["recorded_at"])
     if window is None:
-        return {"evaluated": False, "trained": True}
+        return {"enabled": True, "evaluated": False, "trained": True}
 
     model = bundle["model"]
     prediction = int(model.predict(window[FEATURE_COLUMNS])[0])
@@ -234,6 +249,7 @@ def evaluate_latest_window(household_id, reading):
         )
 
     return {
+        "enabled": True,
         "evaluated": True,
         "trained": True,
         "anomaly": anomaly,
