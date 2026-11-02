@@ -7,6 +7,7 @@ from flask import current_app
 from backend.db import execute, fetch_one
 from backend.realtime import publish_event
 from backend.services.readings import create_reading
+from backend.services.anomaly_model import evaluate_latest_window
 from backend.validation import nonnegative_float
 from backend.mqtt.topics import parse_topic
 
@@ -56,7 +57,7 @@ def handle_reading(household_id, data):
     volume = nonnegative_float(data.get("volumen_l"), "volumen_l", 10000)
     recorded_at = _parse_datetime(data.get("recorded_at"))
 
-    return create_reading(
+    reading = create_reading(
         household_id=household_id,
         sensor_id=sensor["id"],
         recorded_at=recorded_at,
@@ -66,6 +67,22 @@ def handle_reading(household_id, data):
         created_by_user_id=None,
         origin_mqtt=True,
     )
+
+    # El modelo es complementario a las reglas. Un error de ML nunca debe
+    # impedir que una lectura válida quede persistida.
+    try:
+        ml_result = evaluate_latest_window(household_id, reading)
+        if ml_result.get("evaluated"):
+            current_app.logger.info(
+                "[ML] hogar=%s anomalía=%s score=%.4f",
+                household_id,
+                ml_result.get("anomaly"),
+                ml_result.get("score", 0.0),
+            )
+    except Exception:
+        current_app.logger.exception("[ML] fallo evaluando hogar=%s", household_id)
+
+    return reading
 
 
 def handle_state(household_id, data):
