@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from flask import current_app
 
 from backend.db import execute, fetch_one
+from backend.realtime import publish_event
 from backend.services.readings import create_reading
 from backend.validation import nonnegative_float
 from backend.mqtt.topics import parse_topic
@@ -51,8 +52,6 @@ def handle_reading(household_id, data):
     if not sensor or not sensor["active"]:
         raise ValueError("No existe un caudalímetro principal activo para el hogar del tópico")
 
-    # RF-03: descartar telemetría fuera de rango antes de persistirla.
-    # Para el caudalímetro académico se limita la telemetría MQTT a 0-60 L/min.
     flow = nonnegative_float(data.get("caudal_lpm"), "caudal_lpm", 60)
     volume = nonnegative_float(data.get("volumen_l"), "volumen_l", 10000)
     recorded_at = _parse_datetime(data.get("recorded_at"))
@@ -110,4 +109,12 @@ def handle_state(household_id, data):
             (command_id, household_id),
         )
 
+    event = {
+        "tipo": "estado",
+        "en_linea": online,
+        "valvula": valve,
+        "ack": command_id,
+        "recorded_at": data.get("recorded_at"),
+    }
+    publish_event(household_id, event)
     return {"household_id": household_id, "en_linea": online, "valvula": valve, "ack": command_id}
