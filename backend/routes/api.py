@@ -10,11 +10,42 @@ api_bp = Blueprint("api", __name__)
 
 @api_bp.get("/health")
 def health():
+    mqtt_status = current_app.extensions.get(
+        "aquahogar_mqtt_status",
+        {
+            "enabled": bool(current_app.config.get("MQTT_ENABLED")),
+            "connected": False,
+            "last_reason": "not_initialized",
+        },
+    )
     try:
         row = fetch_one("SELECT 1 AS ok")
-        return jsonify({"status": "ok", "database": bool(row and row["ok"] == 1)})
+        database_ok = bool(row and row["ok"] == 1)
+        status = "ok" if database_ok else "degraded"
+        code = 200 if database_ok else 503
+        return jsonify(
+            {
+                "status": status,
+                "database": database_ok,
+                "mqtt": {
+                    "enabled": bool(mqtt_status.get("enabled")),
+                    "connected": bool(mqtt_status.get("connected")),
+                    "last_reason": mqtt_status.get("last_reason"),
+                },
+            }
+        ), code
     except Exception:
-        return jsonify({"status": "degraded", "database": False}), 503
+        return jsonify(
+            {
+                "status": "degraded",
+                "database": False,
+                "mqtt": {
+                    "enabled": bool(mqtt_status.get("enabled")),
+                    "connected": bool(mqtt_status.get("connected")),
+                    "last_reason": mqtt_status.get("last_reason"),
+                },
+            }
+        ), 503
 
 
 @api_bp.get("/lecturas")
@@ -67,8 +98,6 @@ def iot_reading():
             return jsonify({"error": "Caudalímetro principal no encontrado"}), 404
 
         recorded_at = datetime.fromisoformat(body.get("recorded_at")) if body.get("recorded_at") else datetime.now()
-        # Un caudalímetro real debe poder reportar periodos sin consumo.
-        # Por eso 0 L/min y 0 L son lecturas válidas en la telemetría IoT.
         flow = nonnegative_float(body.get("flow_l_min"), "flow_l_min", 500)
         volume = nonnegative_float(body.get("volume_liters"), "volume_liters", 10000)
         reading = create_reading(
