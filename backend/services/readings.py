@@ -2,6 +2,7 @@ from datetime import timedelta
 from statistics import mean
 
 from backend.db import fetch_one, fetch_all, execute
+from backend.realtime import publish_event
 from backend.services.analytics import (
     daily_consumption_anomaly,
     possible_continuous_flow,
@@ -66,6 +67,18 @@ def create_reading(
     )
 
     _evaluate_household_alerts(sensor, reading)
+
+    publish_event(
+        household_id,
+        {
+            "tipo": "lecturas",
+            "reading_id": reading["id"],
+            "caudal_lpm": float(reading["flow_l_min"]),
+            "volumen_l": float(reading["volume_liters"]),
+            "recorded_at": reading["recorded_at"].isoformat(),
+            "origen": "mqtt" if reading["origen_mqtt"] else reading["source"],
+        },
+    )
     return reading
 
 
