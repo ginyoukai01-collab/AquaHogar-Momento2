@@ -21,7 +21,7 @@ MODEL_VERSION = 1
 
 
 def ml_enabled():
-    return (os.getenv("ML_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"})
+    return os.getenv("ML_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _rows_for_household(household_id):
@@ -42,6 +42,10 @@ def _telemetry_coverage(household_id):
     row = fetch_one(
         """
         SELECT COUNT(*) AS total,
+               COUNT(DISTINCT (
+                   date_trunc('hour', r.recorded_at)
+                   + FLOOR(EXTRACT(MINUTE FROM r.recorded_at) / 15) * INTERVAL '15 minutes'
+               )) AS windows,
                MIN(r.recorded_at) AS first_at,
                MAX(r.recorded_at) AS last_at
         FROM readings r
@@ -52,6 +56,7 @@ def _telemetry_coverage(household_id):
         (household_id,),
     )
     total = int(row["total"] or 0)
+    windows = int(row["windows"] or 0)
     first_at = row["first_at"]
     last_at = row["last_at"]
     span_days = 0.0
@@ -59,6 +64,7 @@ def _telemetry_coverage(household_id):
         span_days = max(0.0, (last_at - first_at).total_seconds() / 86400.0)
     return {
         "total": total,
+        "windows": windows,
         "first_at": first_at,
         "last_at": last_at,
         "span_days": span_days,
@@ -111,24 +117,10 @@ def model_status(household_id):
         }
 
     coverage = _telemetry_coverage(household_id)
-    # Antes de una semana completa mostramos una estimación barata y evitamos
-    # reconstruir todas las ventanas con pandas en cada carga de Gestión.
-    if coverage["span_days"] < 7.0:
-        estimated_windows = min(MIN_WINDOWS - 1, int(coverage["span_days"] * 96))
-        return {
-            "enabled": True,
-            "trained": False,
-            "samples": max(0, estimated_windows),
-            "required": MIN_WINDOWS,
-            "span_days": coverage["span_days"],
-        }
-
-    rows = _rows_for_household(household_id)
-    windows = _feature_frame(rows)
     return {
         "enabled": True,
         "trained": False,
-        "samples": len(windows),
+        "samples": coverage["windows"],
         "required": MIN_WINDOWS,
         "span_days": coverage["span_days"],
     }
@@ -139,11 +131,11 @@ def train_household_model(household_id):
         return {"enabled": False, "trained": False}
 
     coverage = _telemetry_coverage(household_id)
-    if coverage["span_days"] < 7.0 or coverage["total"] < MIN_WINDOWS:
+    if coverage["windows"] < MIN_WINDOWS:
         return {
             "enabled": True,
             "trained": False,
-            "samples": min(MIN_WINDOWS - 1, int(coverage["span_days"] * 96)),
+            "samples": coverage["windows"],
             "required": MIN_WINDOWS,
             "span_days": coverage["span_days"],
         }
