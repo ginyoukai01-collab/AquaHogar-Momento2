@@ -1,10 +1,20 @@
+import json
+import os
 import ssl
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
 
 from backend.mqtt.config import mqtt_config, validate_mqtt_config
 from backend.mqtt.handlers import handle_message
-from backend.mqtt.topics import subscriptions
+from backend.mqtt.topics import readings_topic, subscriptions
+
+
+def _as_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _status(app):
@@ -16,6 +26,7 @@ def _status(app):
             "host": None,
             "port": None,
             "last_reason": None,
+            "self_test_sent": False,
         },
     )
 
@@ -48,6 +59,7 @@ def build_client(app):
             status["last_reason"] = f"connect_error:{reason_code}"
             print(f"[MQTT] conexión rechazada, código={reason_code}", flush=True)
             return
+
         mqtt_client.subscribe(subscriptions())
         status["connected"] = True
         status["last_reason"] = "connected"
@@ -55,6 +67,30 @@ def build_client(app):
             f"[MQTT] conectado TLS a {config['host']}:{config['port']} y suscrito a lecturas/estado",
             flush=True,
         )
+
+        if _as_bool(os.getenv("MQTT_SELF_TEST"), False) and not status.get("self_test_sent"):
+            household_id = int(os.getenv("MQTT_SELF_TEST_HOUSEHOLD_ID", "1"))
+            timezone = ZoneInfo(app.config.get("APP_TIMEZONE", "America/Bogota"))
+            payload = {
+                "caudal_lpm": 0.123,
+                "volumen_l": 0.020,
+                "recorded_at": datetime.now(timezone).isoformat(timespec="seconds"),
+                "diagnostico": "mqtt_self_test",
+            }
+            result = mqtt_client.publish(
+                readings_topic(household_id),
+                json.dumps(payload),
+                qos=1,
+                retain=False,
+            )
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                status["self_test_sent"] = True
+                print(
+                    f"[MQTT] autoprueba publicada en {readings_topic(household_id)}",
+                    flush=True,
+                )
+            else:
+                print(f"[MQTT] no se pudo publicar autoprueba, rc={result.rc}", flush=True)
 
     def on_disconnect(mqtt_client, userdata, disconnect_flags, reason_code, properties):
         status["connected"] = False
