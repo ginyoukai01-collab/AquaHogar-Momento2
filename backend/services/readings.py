@@ -9,7 +9,17 @@ from backend.services.analytics import (
 )
 
 
-def create_reading(*, household_id, sensor_id, recorded_at, flow_l_min, volume_liters, source, created_by_user_id=None):
+def create_reading(
+    *,
+    household_id,
+    sensor_id,
+    recorded_at,
+    flow_l_min,
+    volume_liters,
+    source,
+    created_by_user_id=None,
+    origin_mqtt=False,
+):
     sensor = fetch_one(
         """
         SELECT s.id, s.code, s.household_id, s.name, s.installation_point, s.active,
@@ -36,11 +46,22 @@ def create_reading(*, household_id, sensor_id, recorded_at, flow_l_min, volume_l
 
     reading = execute(
         """
-        INSERT INTO readings(sensor_id, recorded_at, flow_l_min, volume_liters, source, created_by_user_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        RETURNING id, sensor_id, recorded_at, flow_l_min, volume_liters, source
+        INSERT INTO readings(
+            sensor_id, recorded_at, flow_l_min, volume_liters,
+            source, created_by_user_id, origen_mqtt
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id, sensor_id, recorded_at, flow_l_min, volume_liters, source, origen_mqtt
         """,
-        (sensor_id, recorded_at, flow_l_min, volume_liters, source, created_by_user_id),
+        (
+            sensor_id,
+            recorded_at,
+            flow_l_min,
+            volume_liters,
+            source,
+            created_by_user_id,
+            bool(origin_mqtt),
+        ),
         returning=True,
     )
 
