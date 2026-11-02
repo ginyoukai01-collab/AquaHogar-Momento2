@@ -7,9 +7,32 @@ from backend.mqtt.handlers import handle_message
 from backend.mqtt.topics import subscriptions
 
 
+def _status(app):
+    return app.extensions.setdefault(
+        "aquahogar_mqtt_status",
+        {
+            "enabled": False,
+            "connected": False,
+            "host": None,
+            "port": None,
+            "last_reason": None,
+        },
+    )
+
+
 def build_client(app):
     config = mqtt_config()
     validate_mqtt_config(config)
+    status = _status(app)
+    status.update(
+        {
+            "enabled": True,
+            "connected": False,
+            "host": config["host"],
+            "port": config["port"],
+            "last_reason": "iniciando",
+        }
+    )
 
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -21,29 +44,32 @@ def build_client(app):
 
     def on_connect(mqtt_client, userdata, flags, reason_code, properties):
         if reason_code != 0:
-            app.logger.error("MQTT no pudo conectarse. Código: %s", reason_code)
+            status["connected"] = False
+            status["last_reason"] = f"connect_error:{reason_code}"
+            print(f"[MQTT] conexión rechazada, código={reason_code}", flush=True)
             return
         mqtt_client.subscribe(subscriptions())
-        app.logger.info(
-            "MQTT conectado a %s:%s y suscrito a lecturas/estado",
-            config["host"],
-            config["port"],
+        status["connected"] = True
+        status["last_reason"] = "connected"
+        print(
+            f"[MQTT] conectado TLS a {config['host']}:{config['port']} y suscrito a lecturas/estado",
+            flush=True,
         )
 
     def on_disconnect(mqtt_client, userdata, disconnect_flags, reason_code, properties):
-        if reason_code != 0:
-            app.logger.warning("MQTT desconectado inesperadamente. Código: %s", reason_code)
-        else:
-            app.logger.info("MQTT desconectado")
+        status["connected"] = False
+        status["last_reason"] = f"disconnect:{reason_code}"
+        print(f"[MQTT] desconectado, código={reason_code}", flush=True)
 
     def on_message(mqtt_client, userdata, message):
         try:
             with app.app_context():
                 handle_message(message.topic, message.payload)
+            print(f"[MQTT] mensaje procesado: {message.topic}", flush=True)
         except ValueError as exc:
-            app.logger.warning("Mensaje MQTT descartado [%s]: %s", message.topic, exc)
-        except Exception:
-            app.logger.exception("Error procesando mensaje MQTT [%s]", message.topic)
+            print(f"[MQTT] mensaje descartado [{message.topic}]: {exc}", flush=True)
+        except Exception as exc:
+            print(f"[MQTT] error procesando [{message.topic}]: {exc}", flush=True)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
@@ -53,8 +79,19 @@ def build_client(app):
 
 def start_mqtt(app):
     config = mqtt_config()
+    status = _status(app)
+
     if not config["enabled"]:
-        app.logger.info("MQTT desactivado (MQTT_ENABLED=false)")
+        status.update(
+            {
+                "enabled": False,
+                "connected": False,
+                "host": None,
+                "port": None,
+                "last_reason": "disabled",
+            }
+        )
+        print("[MQTT] desactivado (MQTT_ENABLED=false)", flush=True)
         return None
 
     if app.extensions.get("aquahogar_mqtt"):
@@ -65,5 +102,5 @@ def start_mqtt(app):
     client.connect_async(config["host"], config["port"], keepalive=config["keepalive"])
     client.loop_start()
     app.extensions["aquahogar_mqtt"] = client
-    app.logger.info("Cliente MQTT iniciado en segundo plano")
+    print("[MQTT] cliente iniciado en segundo plano", flush=True)
     return client
