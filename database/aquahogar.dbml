@@ -1,6 +1,6 @@
 Project AquaHogar {
   database_type: 'PostgreSQL'
-  Note: 'ODS 13 - Monitoreo centralizado del consumo total de agua. Un caudalimetro por inmueble.'
+  Note: 'ODS 13 - Monitoreo centralizado del consumo total de agua. Un caudalimetro por inmueble con telemetria MQTT.'
 }
 
 Table households {
@@ -32,6 +32,9 @@ Table sensors {
   sensor_type varchar(30) [not null, default: 'flujo']
   installation_point varchar(60) [not null, default: 'acometida_principal']
   active boolean [not null, default: true]
+  en_linea boolean [not null, default: false]
+  ultima_conexion timestamptz
+  estado_valvula varchar(8) [note: 'abierta | cerrada']
   installed_at timestamptz
   created_at timestamptz [not null, default: `now()`]
 }
@@ -43,6 +46,7 @@ Table readings {
   flow_l_min numeric(10,2) [not null]
   volume_liters numeric(12,2) [not null]
   source varchar(20) [not null, note: 'manual | iot | simulador']
+  origen_mqtt boolean [not null, default: false]
   created_by_user_id bigint
   created_at timestamptz [not null, default: `now()`]
 
@@ -61,6 +65,8 @@ Table alerts {
   message text [not null]
   alert_date date [not null]
   status varchar(20) [not null, default: 'activa', note: 'activa | resuelta']
+  origen varchar(10) [not null, default: 'regla', note: 'regla | modelo']
+  puntaje numeric(6,4)
   created_at timestamptz [not null, default: `now()`]
   resolved_at timestamptz
 
@@ -69,9 +75,29 @@ Table alerts {
   }
 }
 
+Table modelos_anomalia {
+  household_id bigint [pk]
+  modelo bytea [not null, note: 'IsolationForest serializado con joblib']
+  muestras int [not null]
+  entrenado_en timestamptz [not null, default: `now()`]
+}
+
+Table comandos {
+  id bigint [pk, increment]
+  household_id bigint [not null]
+  usuario_id bigint [not null]
+  accion varchar(20) [not null, note: 'cerrar_valvula | abrir_valvula | reiniciar']
+  estado varchar(12) [not null, default: 'enviado', note: 'enviado | confirmado | fallido']
+  enviado_en timestamptz [not null, default: `now()`]
+  confirmado_en timestamptz
+}
+
 Ref: users.household_id > households.id [delete: cascade]
 Ref: sensors.household_id - households.id [delete: cascade]
 Ref: readings.sensor_id > sensors.id [delete: restrict]
 Ref: readings.created_by_user_id > users.id [delete: set null]
 Ref: alerts.household_id > households.id [delete: cascade]
 Ref: alerts.reading_id > readings.id [delete: set null]
+Ref: modelos_anomalia.household_id - households.id [delete: cascade]
+Ref: comandos.household_id > households.id [delete: cascade]
+Ref: comandos.usuario_id > users.id [delete: restrict]
