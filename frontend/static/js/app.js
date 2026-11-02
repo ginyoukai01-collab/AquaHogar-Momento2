@@ -1,6 +1,12 @@
 (function(){
   "use strict";
+
   const summary = window.AQ_SUMMARY;
+  const live = window.AQ_LIVE;
+  let dailyChart = null;
+  let hourlyChart = null;
+  let liveFlowChart = null;
+  let todayLiters = Number(live?.todayLiters || 0);
 
   function setupMenu(){
     const btn=document.querySelector('[data-menu-toggle]');
@@ -20,37 +26,135 @@
     });
   }
 
-  function scaleCanvas(canvas){
-    const dpr=window.devicePixelRatio||1, rect=canvas.getBoundingClientRect();
-    canvas.width=Math.max(1,rect.width*dpr); canvas.height=Math.max(1,rect.height*dpr);
-    const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr); return {ctx,w:rect.width,h:rect.height};
+  function buildStaticCharts(){
+    if(!summary || typeof Chart === 'undefined') return;
+
+    const dailyCanvas=document.getElementById('dailyChart');
+    if(dailyCanvas && summary.daily?.length){
+      dailyChart=new Chart(dailyCanvas,{
+        type:'line',
+        data:{
+          labels:summary.daily.map(r=>r.date),
+          datasets:[{
+            label:'Litros/día',
+            data:summary.daily.map(r=>Number(r.liters)),
+            borderColor:'#087f70',
+            backgroundColor:'rgba(8,127,112,.12)',
+            fill:true,
+            tension:.3
+          }]
+        },
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+      });
+    }
+
+    const hourlyCanvas=document.getElementById('hourlyChart');
+    if(hourlyCanvas && summary.hourly?.length){
+      hourlyChart=new Chart(hourlyCanvas,{
+        type:'bar',
+        data:{
+          labels:summary.hourly.map(r=>r.hour),
+          datasets:[{
+            label:'Litros',
+            data:summary.hourly.map(r=>Number(r.liters)),
+            backgroundColor:'#0aa792',
+            borderRadius:6
+          }]
+        },
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+      });
+    }
   }
 
-  function lineChart(canvas, rows){
-    if(!canvas || !rows?.length) return;
-    const {ctx,w,h}=scaleCanvas(canvas), pad=42, values=rows.map(x=>Number(x.liters));
-    const max=Math.max(...values,1)*1.12;
-    ctx.clearRect(0,0,w,h); ctx.font='12px system-ui'; ctx.lineWidth=1;
-    ctx.strokeStyle='#d8e8e5';
-    for(let i=0;i<5;i++){const y=pad+(h-2*pad)*i/4;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke();}
-    const x=i=>pad+(w-2*pad)*(values.length===1?0:i/(values.length-1));
-    const y=v=>h-pad-(h-2*pad)*(v/max);
-    ctx.beginPath();values.forEach((v,i)=>i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v)));ctx.strokeStyle='#087f70';ctx.lineWidth=3;ctx.stroke();
-    values.forEach((v,i)=>{ctx.beginPath();ctx.arc(x(i),y(v),4,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#087f70';ctx.lineWidth=2;ctx.stroke();});
-    ctx.fillStyle='#607776';ctx.textAlign='center';rows.forEach((r,i)=>ctx.fillText(r.date.slice(5),x(i),h-13));ctx.textAlign='left';ctx.fillText(`${Math.round(max)} L`,4,pad+3);ctx.fillText('0 L',10,h-pad+3);
+  function buildLiveChart(){
+    const canvas=document.getElementById('liveFlowChart');
+    if(!canvas || typeof Chart === 'undefined') return;
+
+    liveFlowChart=new Chart(canvas,{
+      type:'line',
+      data:{labels:[],datasets:[{
+        label:'Caudal (L/min)',
+        data:[],
+        borderColor:'#087f70',
+        backgroundColor:'rgba(8,127,112,.10)',
+        fill:true,
+        tension:.25,
+        pointRadius:2
+      }]},
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        animation:false,
+        plugins:{legend:{display:false}},
+        scales:{y:{beginAtZero:true,title:{display:true,text:'L/min'}}}
+      }
+    });
+
+    if(Number.isFinite(Number(live?.initialFlow))){
+      addLivePoint(new Date(),Number(live.initialFlow));
+    }
   }
 
-  function barChart(canvas, rows){
-    if(!canvas || !rows?.length) return;
-    const {ctx,w,h}=scaleCanvas(canvas), pad=42, values=rows.map(x=>Number(x.liters)), max=Math.max(...values,1)*1.12;
-    const cell=(w-2*pad)/rows.length, bw=Math.min(34,cell*.65);
-    ctx.clearRect(0,0,w,h);ctx.font='11px system-ui';ctx.strokeStyle='#d8e8e5';
-    for(let i=0;i<4;i++){const y=pad+(h-2*pad)*i/3;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(w-pad,y);ctx.stroke();}
-    rows.forEach((r,i)=>{const x=pad+cell*(i+.5),bh=(h-2*pad)*(Number(r.liters)/max),top=h-pad-bh;ctx.fillStyle='#0aa792';roundRect(ctx,x-bw/2,top,bw,bh,7);ctx.fill();ctx.fillStyle='#607776';ctx.textAlign='center';ctx.fillText(r.hour,x,h-12);});
+  function addLivePoint(date,flow){
+    if(!liveFlowChart) return;
+    const label=new Date(date).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    liveFlowChart.data.labels.push(label);
+    liveFlowChart.data.datasets[0].data.push(Number(flow));
+    while(liveFlowChart.data.labels.length>30){
+      liveFlowChart.data.labels.shift();
+      liveFlowChart.data.datasets[0].data.shift();
+    }
+    liveFlowChart.update('none');
   }
 
-  function roundRect(ctx,x,y,w,h,r){const rr=Math.min(r,w/2,h/2);ctx.beginPath();ctx.moveTo(x+rr,y);ctx.arcTo(x+w,y,x+w,y+h,rr);ctx.arcTo(x+w,y+h,x,y+h,rr);ctx.arcTo(x,y+h,x,y,rr);ctx.arcTo(x,y,x+w,y,rr);ctx.closePath();}
-  function renderCharts(){if(!summary)return;lineChart(document.getElementById('dailyChart'),summary.daily);barChart(document.getElementById('hourlyChart'),summary.hourly);}
-  window.addEventListener('DOMContentLoaded',()=>{setupMenu();setupFilter();renderCharts();});
-  window.addEventListener('resize',()=>{clearTimeout(window.__aqResize);window.__aqResize=setTimeout(renderCharts,120);});
+  function setDeviceState(online,valve){
+    const status=document.getElementById('sensorStatus');
+    const valveStatus=document.getElementById('valveStatus');
+    if(status && online !== null && online !== undefined){
+      status.textContent=online?'En línea':'Desconectado';
+      status.classList.toggle('normal',Boolean(online));
+      status.classList.toggle('warning',!online);
+    }
+    if(valveStatus && valve){
+      valveStatus.textContent=`Válvula: ${valve}`;
+    }
+  }
+
+  function handleReading(data){
+    const flow=Number(data.caudal_lpm || 0);
+    const volume=Number(data.volumen_l || 0);
+    const flowEl=document.getElementById('liveFlowValue');
+    const todayEl=document.getElementById('todayLitersValue');
+
+    if(flowEl) flowEl.textContent=`${flow.toFixed(2)} L/min`;
+    todayLiters += volume;
+    if(todayEl) todayEl.textContent=`${todayLiters.toFixed(2)} L`;
+    addLivePoint(data.recorded_at || new Date(),flow);
+  }
+
+  function setupLiveStream(){
+    if(!live?.streamUrl || typeof EventSource === 'undefined') return;
+    const badge=document.getElementById('sseStatus');
+    const source=new EventSource(live.streamUrl);
+
+    source.onopen=()=>{if(badge) badge.textContent='En vivo';};
+    source.onerror=()=>{if(badge) badge.textContent='Reconectando…';};
+    source.onmessage=(event)=>{
+      let data;
+      try{data=JSON.parse(event.data);}catch(_err){return;}
+      if(data.tipo==='lecturas') handleReading(data);
+      if(data.tipo==='estado') setDeviceState(data.en_linea,data.valvula);
+    };
+
+    window.addEventListener('beforeunload',()=>source.close());
+  }
+
+  window.addEventListener('DOMContentLoaded',()=>{
+    setupMenu();
+    setupFilter();
+    buildStaticCharts();
+    buildLiveChart();
+    setDeviceState(live?.sensorOnline,live?.valveState);
+    setupLiveStream();
+  });
 })();
