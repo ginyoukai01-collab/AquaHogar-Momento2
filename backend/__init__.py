@@ -83,4 +83,8 @@ def create_app(test_config=None):
         )
         return response
 
+    if not app.config.get("TESTING"):
+        from .mqtt.client import start_mqtt
+        start_mqtt(app)
+
     return app
