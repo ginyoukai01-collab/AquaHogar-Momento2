@@ -1,8 +1,20 @@
 from datetime import datetime
 import psycopg
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort
+from flask import (
+    Blueprint,
+    Response,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    stream_with_context,
+    url_for,
+)
 
 from backend.db import fetch_one, fetch_all, execute
+from backend.realtime import subscribe, sse_stream
 from backend.security import login_required, validate_csrf
 from backend.validation import clean_text, positive_float, parse_datetime
 from backend.services.analytics import summarize_readings
@@ -21,6 +33,24 @@ def home():
 def dashboard():
     context = _dashboard_context(session["household_id"])
     return render_template("dashboard.html", **context)
+
+
+@main_bp.get("/stream/<int:household_id>")
+@login_required
+def stream(household_id):
+    if household_id != session.get("household_id"):
+        abort(403)
+
+    channel = subscribe(household_id)
+    return Response(
+        stream_with_context(sse_stream(household_id, channel)),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @main_bp.route("/gestion", methods=["GET", "POST"])
@@ -98,14 +128,16 @@ def management():
     )
     sensor = fetch_one(
         """
-        SELECT id, code, name, sensor_type, installation_point, active, installed_at, created_at
+        SELECT id, code, name, sensor_type, installation_point, active,
+               installed_at, created_at, en_linea, ultima_conexion, estado_valvula
         FROM sensors WHERE household_id=%s
         """,
         (household_id,),
     )
     alerts = fetch_all(
         """
-        SELECT id, alert_type, severity, title, message, status, created_at
+        SELECT id, alert_type, severity, title, message, status, created_at,
+               origen, puntaje
         FROM alerts WHERE household_id=%s ORDER BY created_at DESC LIMIT 30
         """,
         (household_id,),
@@ -172,6 +204,7 @@ def _readings(household_id, limit=180):
     return fetch_all(
         """
         SELECT r.id, r.recorded_at, r.flow_l_min, r.volume_liters, r.source,
+               r.origen_mqtt,
                s.code AS sensor_code, s.name AS sensor_name, s.installation_point
         FROM readings r
         JOIN sensors s ON s.id=r.sensor_id
@@ -193,7 +226,11 @@ def _dashboard_context(household_id, limit=180):
         (household_id,),
     )
     sensor = fetch_one(
-        "SELECT id, code, name, installation_point, active FROM sensors WHERE household_id=%s",
+        """
+        SELECT id, code, name, installation_point, active,
+               en_linea, ultima_conexion, estado_valvula
+        FROM sensors WHERE household_id=%s
+        """,
         (household_id,),
     )
     readings_desc = _readings(household_id, limit)
@@ -201,7 +238,8 @@ def _dashboard_context(household_id, limit=180):
     summary = summarize_readings(readings, household["daily_goal_liters"])
     alerts = fetch_all(
         """
-        SELECT id, alert_type, severity, title, message, status, created_at
+        SELECT id, alert_type, severity, title, message, status, created_at,
+               origen, puntaje
         FROM alerts WHERE household_id=%s ORDER BY created_at DESC LIMIT 8
         """,
         (household_id,),
