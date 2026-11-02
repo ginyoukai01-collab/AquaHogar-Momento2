@@ -1,1 +1,1 @@
-web: gunicorn --bind 0.0.0.0:$PORT wsgi:app
+web: gunicorn --workers 1 --threads 50 --bind 0.0.0.0:$PORT wsgi:app
