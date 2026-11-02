@@ -20,6 +20,7 @@ USER = os.getenv("MQTT_DEVICE_USER") or os.getenv("MQTT_USER") or ""
 PASSWORD = os.getenv("MQTT_DEVICE_PASS") or os.getenv("MQTT_PASS") or ""
 HOUSEHOLD_ID = int(os.getenv("MQTT_HOUSEHOLD_ID", "1"))
 CLIENT_ID = os.getenv("MQTT_SIMULATOR_CLIENT_ID", f"aquahogar-simulador-{HOUSEHOLD_ID}")
+KEEPALIVE = int(os.getenv("MQTT_DEVICE_KEEPALIVE", "15"))
 INTERVAL_SECONDS = float(os.getenv("MQTT_SIMULATOR_INTERVAL_SECONDS", "1"))
 STEP_MINUTES = int(os.getenv("MQTT_SIMULATOR_STEP_MINUTES", "10"))
 MAX_STEPS = int(os.getenv("MQTT_SIMULATOR_MAX_STEPS", "0"))
@@ -159,7 +160,7 @@ def main():
     global simulated_time
 
     client = build_client()
-    client.connect(HOST, PORT, keepalive=60)
+    client.connect(HOST, PORT, keepalive=KEEPALIVE)
     client.loop_start()
 
     print("Simulador AquaHogar MQTT iniciado. Ctrl+C para detener.")
@@ -167,6 +168,7 @@ def main():
         f"Inicio={simulated_time.isoformat(timespec='minutes')} | "
         f"+{STEP_MINUTES} min cada {INTERVAL_SECONDS}s reales | "
         f"pasos={'sin límite' if MAX_STEPS <= 0 else MAX_STEPS} | "
+        f"keepalive={KEEPALIVE}s | "
         f"fuga={'sí' if LEAK_ENABLED else 'no'}"
     )
 
