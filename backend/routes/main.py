@@ -18,6 +18,7 @@ from backend.realtime import subscribe, sse_stream
 from backend.security import login_required, validate_csrf
 from backend.validation import clean_text, positive_float, parse_datetime
 from backend.services.analytics import summarize_readings
+from backend.services.anomaly_model import model_status
 from backend.services.readings import create_reading
 
 main_bp = Blueprint("main", __name__)
@@ -142,7 +143,14 @@ def management():
         """,
         (household_id,),
     )
-    return render_template("gestion.html", household=household, sensor=sensor, alerts=alerts)
+    ml = model_status(household_id)
+    return render_template(
+        "gestion.html",
+        household=household,
+        sensor=sensor,
+        alerts=alerts,
+        ml=ml,
+    )
 
 
 @main_bp.route("/lecturas/nueva", methods=["GET", "POST"])
