@@ -16,8 +16,8 @@ load_dotenv()
 
 HOST = (os.getenv("MQTT_HOST") or "").strip()
 PORT = int(os.getenv("MQTT_PORT", "8883"))
-USER = os.getenv("MQTT_USER") or ""
-PASSWORD = os.getenv("MQTT_PASS") or ""
+USER = os.getenv("MQTT_DEVICE_USER") or os.getenv("MQTT_USER") or ""
+PASSWORD = os.getenv("MQTT_DEVICE_PASS") or os.getenv("MQTT_PASS") or ""
 HOUSEHOLD_ID = int(os.getenv("MQTT_HOUSEHOLD_ID", "1"))
 CLIENT_ID = os.getenv("MQTT_SIMULATOR_CLIENT_ID", f"aquahogar-simulador-{HOUSEHOLD_ID}")
 INTERVAL_SECONDS = float(os.getenv("MQTT_SIMULATOR_INTERVAL_SECONDS", "1"))
@@ -32,7 +32,9 @@ T_STATE = state_topic(HOUSEHOLD_ID)
 T_COMMANDS = commands_topic(HOUSEHOLD_ID)
 
 if not HOST or not USER or not PASSWORD:
-    raise SystemExit("Configura MQTT_HOST, MQTT_USER y MQTT_PASS antes de ejecutar el simulador.")
+    raise SystemExit(
+        "Configura MQTT_HOST, MQTT_DEVICE_USER y MQTT_DEVICE_PASS antes de ejecutar el simulador."
+    )
 
 valve_state = "abierta"
 simulated_time = datetime.now(TZ).replace(second=0, microsecond=0)
@@ -60,10 +62,9 @@ def realistic_flow(ts):
     else:
         base = random.uniform(0.0, 0.25)
 
-    # Variación suave para evitar una señal completamente aleatoria.
     base += max(0.0, math.sin(ts.minute / 60 * math.pi)) * random.uniform(0.0, 0.25)
 
-    if LEAK_ENABLED and ts.hour >= LEAK_START_HOUR and ts.hour < 5:
+    if LEAK_ENABLED and LEAK_START_HOUR <= ts.hour < 5:
         base += LEAK_FLOW
 
     if valve_state == "cerrada":
@@ -89,7 +90,7 @@ def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code != 0:
         print(f"No fue posible conectar al broker. Código: {reason_code}")
         return
-    print(f"Conectado a MQTT TLS {HOST}:{PORT}")
+    print(f"Conectado a MQTT TLS {HOST}:{PORT} como {USER}")
     print(f"Lecturas: {T_READINGS}")
     print(f"Estado:   {T_STATE}")
     print(f"Comandos: {T_COMMANDS}")
