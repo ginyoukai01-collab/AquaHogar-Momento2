@@ -25,6 +25,13 @@ def create_app(test_config=None):
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=_as_bool(os.getenv("COOKIE_SECURE"), False),
+        MQTT_ENABLED=_as_bool(os.getenv("MQTT_ENABLED"), False),
+        MQTT_HOST=(os.getenv("MQTT_HOST") or "").strip(),
+        MQTT_PORT=int(os.getenv("MQTT_PORT", "8883")),
+        MQTT_USER=os.getenv("MQTT_USER") or "",
+        MQTT_PASS=os.getenv("MQTT_PASS") or "",
+        MQTT_CLIENT_ID=os.getenv("MQTT_CLIENT_ID", "aquahogar-backend"),
+        MQTT_KEEPALIVE=int(os.getenv("MQTT_KEEPALIVE", "60")),
     )
 
     if test_config:
@@ -37,6 +44,18 @@ def create_app(test_config=None):
                 "Faltan variables obligatorias: " + ", ".join(missing) + ". "
                 "Copia .env.example a .env y configura valores reales."
             )
+
+        if app.config.get("MQTT_ENABLED"):
+            mqtt_missing = [
+                name
+                for name in ("MQTT_HOST", "MQTT_USER", "MQTT_PASS")
+                if not app.config.get(name)
+            ]
+            if mqtt_missing:
+                raise RuntimeError(
+                    "MQTT_ENABLED=true pero faltan variables obligatorias: "
+                    + ", ".join(mqtt_missing)
+                )
 
     from .routes.auth import auth_bp
     from .routes.main import main_bp
