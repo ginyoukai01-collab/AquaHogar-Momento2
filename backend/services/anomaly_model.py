@@ -38,6 +38,33 @@ def _rows_for_household(household_id):
     )
 
 
+def _telemetry_coverage(household_id):
+    row = fetch_one(
+        """
+        SELECT COUNT(*) AS total,
+               MIN(r.recorded_at) AS first_at,
+               MAX(r.recorded_at) AS last_at
+        FROM readings r
+        JOIN sensors s ON s.id=r.sensor_id
+        WHERE s.household_id=%s
+          AND r.origen_mqtt=TRUE
+        """,
+        (household_id,),
+    )
+    total = int(row["total"] or 0)
+    first_at = row["first_at"]
+    last_at = row["last_at"]
+    span_days = 0.0
+    if first_at and last_at:
+        span_days = max(0.0, (last_at - first_at).total_seconds() / 86400.0)
+    return {
+        "total": total,
+        "first_at": first_at,
+        "last_at": last_at,
+        "span_days": span_days,
+    }
+
+
 def _feature_frame(rows):
     if not rows:
         return pd.DataFrame(columns=FEATURE_COLUMNS)
@@ -83,6 +110,19 @@ def model_status(household_id):
             "trained_at": row["entrenado_en"],
         }
 
+    coverage = _telemetry_coverage(household_id)
+    # Antes de una semana completa mostramos una estimación barata y evitamos
+    # reconstruir todas las ventanas con pandas en cada carga de Gestión.
+    if coverage["span_days"] < 7.0:
+        estimated_windows = min(MIN_WINDOWS - 1, int(coverage["span_days"] * 96))
+        return {
+            "enabled": True,
+            "trained": False,
+            "samples": max(0, estimated_windows),
+            "required": MIN_WINDOWS,
+            "span_days": coverage["span_days"],
+        }
+
     rows = _rows_for_household(household_id)
     windows = _feature_frame(rows)
     return {
@@ -90,12 +130,23 @@ def model_status(household_id):
         "trained": False,
         "samples": len(windows),
         "required": MIN_WINDOWS,
+        "span_days": coverage["span_days"],
     }
 
 
 def train_household_model(household_id):
     if not ml_enabled():
         return {"enabled": False, "trained": False}
+
+    coverage = _telemetry_coverage(household_id)
+    if coverage["span_days"] < 7.0 or coverage["total"] < MIN_WINDOWS:
+        return {
+            "enabled": True,
+            "trained": False,
+            "samples": min(MIN_WINDOWS - 1, int(coverage["span_days"] * 96)),
+            "required": MIN_WINDOWS,
+            "span_days": coverage["span_days"],
+        }
 
     rows = _rows_for_household(household_id)
     windows = _feature_frame(rows)
@@ -105,6 +156,7 @@ def train_household_model(household_id):
             "trained": False,
             "samples": len(windows),
             "required": MIN_WINDOWS,
+            "span_days": coverage["span_days"],
         }
 
     model = IsolationForest(
