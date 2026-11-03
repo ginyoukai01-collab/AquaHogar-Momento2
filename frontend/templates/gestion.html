@@ -33,5 +33,52 @@
   </div>
 </section>
 
+<section class="card">
+  <div class="card-head">
+    <div><h2>Control remoto de válvula</h2><p>Canal bidireccional MQTT. Solo un administrador puede enviar comandos.</p></div>
+    <span class="status-badge {{ 'normal' if sensor and sensor.en_linea else 'resolved' }}">{{ 'Dispositivo en línea' if sensor and sensor.en_linea else 'Dispositivo desconectado' }}</span>
+  </div>
+  <div class="stack-list">
+    <div class="list-row"><div><strong>Estado confirmado</strong><small>Último estado recibido desde el ESP32/simulador.</small></div><span>{{ sensor.estado_valvula|title if sensor and sensor.estado_valvula else 'Desconocido' }}</span></div>
+  </div>
+  {% if session.get('role')=='admin' %}
+  <div class="grid grid-2" style="margin-top:1rem;">
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="send_command">
+      <input type="hidden" name="command_action" value="abrir_valvula">
+      <button class="btn" type="submit">Abrir válvula</button>
+    </form>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="send_command">
+      <input type="hidden" name="command_action" value="cerrar_valvula">
+      <button class="btn ghost" type="submit">Cerrar válvula</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="empty" style="margin-top:1rem;">Tu rol es de solo lectura para el control remoto.</div>
+  {% endif %}
+
+  <div class="card-head" style="margin-top:1.5rem;"><div><h3>Historial de comandos</h3><p>El ACK del dispositivo cambia el estado a confirmado; sin ACK, pasa a fallido tras 30 segundos.</p></div></div>
+  <div class="stack-list">
+    {% for c in commands %}
+    <div class="list-row">
+      <div>
+        <strong>#{{ c.id }} · {{ c.accion|replace('_',' ')|title }}</strong>
+        <small>{{ c.usuario_nombre }} · {{ c.enviado_en.strftime('%Y-%m-%d %H:%M:%S') }}{% if c.confirmado_en %} · ACK {{ c.confirmado_en.strftime('%H:%M:%S') }}{% endif %}</small>
+      </div>
+      <span class="status-badge {{ 'normal' if c.estado=='confirmado' else ('alta' if c.estado=='fallido' else 'resolved') }}">{{ c.estado }}</span>
+    </div>
+    {% else %}
+    <div class="empty">Todavía no se han enviado comandos.</div>
+    {% endfor %}
+  </div>
+</section>
+
 <section class="card"><div class="card-head"><div><h2>Alertas</h2><p>Se generan por consumo total inusual, flujo persistente o detección del modelo.</p></div></div><div class="alert-list">{% for a in alerts %}<div class="alert-item {{ a.severity }}"><div><strong>{{ a.title }}</strong><p>{{ a.message }}</p><small>{{ a.alert_type|replace('_',' ')|title }} · Origen: {{ a.origen or 'regla' }}{% if a.puntaje is not none %} · Puntaje: {{ a.puntaje }}{% endif %} · {{ a.created_at.strftime('%Y-%m-%d %H:%M') }}</small></div><div class="alert-actions"><span class="status-badge {{ 'resolved' if a.status=='resuelta' else a.severity }}">{{ a.status }}</span>{% if a.status=='activa' %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="resolve_alert"><input type="hidden" name="alert_id" value="{{ a.id }}"><button class="btn ghost small-btn" type="submit">Resolver</button></form>{% endif %}</div></div>{% else %}<div class="empty">No hay alertas.</div>{% endfor %}</div></section>
+
+{% if commands and commands[0].estado == 'enviado' %}
+<script>setTimeout(function(){ window.location.reload(); }, 3000);</script>
+{% endif %}
 {% endblock %}
