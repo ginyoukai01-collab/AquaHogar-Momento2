@@ -18,6 +18,7 @@ FEATURE_COLUMNS = [
 ]
 MIN_WINDOWS = int(os.getenv("ML_MIN_WINDOWS", str(7 * 96)))
 MODEL_VERSION = 1
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "America/Bogota")
 
 
 def ml_enabled():
@@ -86,6 +87,7 @@ def _feature_frame(rows):
         ]
     )
     frame["recorded_at"] = pd.to_datetime(frame["recorded_at"], utc=True)
+    frame["recorded_at"] = frame["recorded_at"].dt.tz_convert(APP_TIMEZONE)
     frame = frame.set_index("recorded_at").sort_index()
 
     windows = frame.resample("15min").agg(
