@@ -36,6 +36,9 @@ def csrf_token():
 
 def validate_csrf():
     expected = session.get("csrf_token")
-    supplied = request.form.get("csrf_token", "")
+    supplied = request.form.get("csrf_token", "") or request.headers.get("X-CSRF-Token", "")
+    if not supplied and request.is_json:
+        body = request.get_json(silent=True) or {}
+        supplied = str(body.get("csrf_token", ""))
     if not expected or not supplied or not hmac.compare_digest(expected, supplied):
         abort(400, description="Token CSRF inválido o ausente.")
