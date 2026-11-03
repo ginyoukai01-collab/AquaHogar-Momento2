@@ -2,6 +2,8 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app, session
 
 from backend.db import fetch_one, fetch_all
+from backend.security import validate_csrf
+from backend.services.commands import list_commands, send_command
 from backend.services.readings import create_reading
 from backend.validation import nonnegative_float
 
@@ -114,3 +116,55 @@ def iot_reading():
         return jsonify({"error": str(exc)}), 400
     except Exception:
         return jsonify({"error": "Error interno al registrar la lectura"}), 500
+
+
+@api_bp.post("/hogares/<int:household_id>/comandos")
+def create_remote_command(household_id):
+    if not session.get("user_id"):
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if household_id != session.get("household_id"):
+        return jsonify({"error": "No autorizado para controlar este hogar"}), 403
+    if session.get("role") != "admin":
+        return jsonify({"error": "Se requiere rol administrador"}), 403
+
+    validate_csrf()
+    body = request.get_json(silent=True) or {}
+    try:
+        command = send_command(
+            household_id=household_id,
+            user_id=session["user_id"],
+            action=str(body.get("accion", "")).strip(),
+        )
+        return jsonify(
+            {
+                "accepted": True,
+                "command_id": command["id"],
+                "accion": command["accion"],
+                "estado": command["estado"],
+            }
+        ), 202
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@api_bp.get("/hogares/<int:household_id>/comandos")
+def remote_commands(household_id):
+    if not session.get("user_id"):
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if household_id != session.get("household_id"):
+        return jsonify({"error": "No autorizado para consultar este hogar"}), 403
+
+    rows = list_commands(household_id, limit=20)
+    commands = []
+    for row in rows:
+        commands.append(
+            {
+                "id": row["id"],
+                "accion": row["accion"],
+                "estado": row["estado"],
+                "usuario": row["usuario_nombre"],
+                "enviado_en": row["enviado_en"].isoformat(),
+                "confirmado_en": row["confirmado_en"].isoformat() if row["confirmado_en"] else None,
+            }
+        )
+    return jsonify({"commands": commands})
