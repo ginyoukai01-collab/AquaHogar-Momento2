@@ -19,6 +19,7 @@ from backend.security import login_required, validate_csrf
 from backend.validation import clean_text, positive_float, parse_datetime
 from backend.services.analytics import summarize_readings
 from backend.services.anomaly_model import model_status
+from backend.services.commands import list_commands, send_command
 from backend.services.readings import create_reading
 
 main_bp = Blueprint("main", __name__)
@@ -110,6 +111,20 @@ def management():
                     (code, name or "Caudalímetro principal", active, household_id),
                 )
                 flash("Caudalímetro principal actualizado.", "success")
+
+            elif action == "send_command":
+                if session.get("role") != "admin":
+                    abort(403)
+                command_action = request.form.get("command_action", "")
+                command = send_command(
+                    household_id=household_id,
+                    user_id=session["user_id"],
+                    action=command_action,
+                )
+                flash(
+                    f"Comando #{command['id']} enviado por MQTT. Esperando confirmación del dispositivo.",
+                    "success",
+                )
             else:
                 raise ValueError("Operación de gestión no reconocida.")
 
@@ -144,12 +159,14 @@ def management():
         (household_id,),
     )
     ml = model_status(household_id)
+    commands = list_commands(household_id, limit=12)
     return render_template(
         "gestion.html",
         household=household,
         sensor=sensor,
         alerts=alerts,
         ml=ml,
+        commands=commands,
     )
 
 
