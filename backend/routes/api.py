@@ -1,67 +1,3 @@
-from datetime import datetime
-from flask import Blueprint, request, jsonify, current_app, session
-
-from backend.db import fetch_one, fetch_all
-from backend.security import validate_csrf
-from backend.services.commands import list_commands, send_command
-from backend.services.readings import create_reading
-from backend.validation import nonnegative_float
-
-api_bp = Blueprint("api", __name__)
-
-
-@api_bp.get("/health")
-def health():
-    mqtt_status = current_app.extensions.get(
-        "aquahogar_mqtt_status",
-        {
-            "enabled": bool(current_app.config.get("MQTT_ENABLED")),
-            "connected": False,
-            "last_reason": "not_initialized",
-        },
-    )
-    try:
-        row = fetch_one("SELECT 1 AS ok")
-        database_ok = bool(row and row["ok"] == 1)
-        status = "ok" if database_ok else "degraded"
-        code = 200 if database_ok else 503
-        return jsonify(
-            {
-                "status": status,
-                "database": database_ok,
-                "mqtt": {
-                    "enabled": bool(mqtt_status.get("enabled")),
-                    "connected": bool(mqtt_status.get("connected")),
-                    "last_reason": mqtt_status.get("last_reason"),
-                },
-            }
-        ), code
-    except Exception:
-        return jsonify(
-            {
-                "status": "degraded",
-                "database": False,
-                "mqtt": {
-                    "enabled": bool(mqtt_status.get("enabled")),
-                    "connected": bool(mqtt_status.get("connected")),
-                    "last_reason": mqtt_status.get("last_reason"),
-                },
-            }
-        ), 503
-
-
-@api_bp.get("/lecturas")
-def readings():
-    if not session.get("user_id"):
-        return jsonify({"error": "Autenticación requerida"}), 401
-    household_id = request.args.get("household_id", type=int) or session.get("household_id")
-    if household_id != session.get("household_id"):
-        return jsonify({"error": "No autorizado para consultar este hogar"}), 403
-
-    rows = fetch_all(
-        """
-        SELECT r.id, r.recorded_at, r.flow_l_min, r.volume_liters, r.source,
-               s.code AS sensor_code, s.installation_point
         FROM readings r
         JOIN sensors s ON s.id=r.sensor_id
         WHERE s.household_id=%s
@@ -94,3 +30,77 @@ def iot_reading():
             FROM sensors
             WHERE code=%s AND active=TRUE AND installation_point='acometida_principal'
             """,
+            (sensor_code,),
+        )
+        if not sensor:
+            return jsonify({"error": "Caudalímetro principal no encontrado"}), 404
+
+        recorded_at = datetime.fromisoformat(body.get("recorded_at")) if body.get("recorded_at") else datetime.now()
+        flow = nonnegative_float(body.get("flow_l_min"), "flow_l_min", 500)
+        volume = nonnegative_float(body.get("volume_liters"), "volume_liters", 10000)
+        reading = create_reading(
+            household_id=sensor["household_id"],
+            sensor_id=sensor["id"],
+            recorded_at=recorded_at,
+            flow_l_min=flow,
+            volume_liters=volume,
+            source="iot",
+            created_by_user_id=None,
+        )
+        return jsonify({"accepted": True, "reading_id": reading["id"]}), 201
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        return jsonify({"error": "Error interno al registrar la lectura"}), 500
+
+
+@api_bp.post("/hogares/<int:household_id>/comandos")
+def create_remote_command(household_id):
+    if not session.get("user_id"):
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if household_id != session.get("household_id"):
+        return jsonify({"error": "No autorizado para controlar este hogar"}), 403
+    if session.get("role") != "admin":
+        return jsonify({"error": "Se requiere rol administrador"}), 403
+
+    validate_csrf()
+    body = request.get_json(silent=True) or {}
+    try:
+        command = send_command(
+            household_id=household_id,
+            user_id=session["user_id"],
+            action=str(body.get("accion", "")).strip(),
+        )
+        return jsonify(
+            {
+                "accepted": True,
+                "command_id": command["id"],
+                "accion": command["accion"],
+                "estado": command["estado"],
+            }
+        ), 202
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@api_bp.get("/hogares/<int:household_id>/comandos")
+def remote_commands(household_id):
+    if not session.get("user_id"):
+        return jsonify({"error": "Autenticación requerida"}), 401
+    if household_id != session.get("household_id"):
+        return jsonify({"error": "No autorizado para consultar este hogar"}), 403
+
+    rows = list_commands(household_id, limit=20)
+    commands = []
+    for row in rows:
+        commands.append(
+            {
+                "id": row["id"],
+                "accion": row["accion"],
+                "estado": row["estado"],
+                "usuario": row["usuario_nombre"],
+                "enviado_en": row["enviado_en"].isoformat(),
+                "confirmado_en": row["confirmado_en"].isoformat() if row["confirmado_en"] else None,
+            }
+        )
+    return jsonify({"commands": commands})
