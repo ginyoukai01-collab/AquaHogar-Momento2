@@ -7,6 +7,10 @@
   let hourlyChart = null;
   let liveFlowChart = null;
   let todayLiters = Number(live?.todayLiters || 0);
+  let lastSeenReadingId = null;
+  let lastReadingDate = null;
+  let readingPollingInProgress = false;
+  let readingPollingTimer = null;
 
   function setupMenu(){
     const btn=document.querySelector('[data-menu-toggle]');
@@ -120,33 +124,89 @@
     }
   }
 
-  function handleReading(data){
-    const flow=Number(data.caudal_lpm || 0);
-    const volume=Number(data.volumen_l || 0);
-    const flowEl=document.getElementById('liveFlowValue');
-    const todayEl=document.getElementById('todayLitersValue');
-
-    if(flowEl) flowEl.textContent=`${flow.toFixed(2)} L/min`;
-    todayLiters += volume;
-    if(todayEl) todayEl.textContent=`${todayLiters.toFixed(2)} L`;
-    addLivePoint(data.recorded_at || new Date(),flow);
-  }
-
+  // SSE sigue escuchando cambios de estado de la válvula/dispositivo.
+  // Las lecturas se dibujan por consulta HTTP para evitar depender de SSE.
   function setupLiveStream(){
     if(!live?.streamUrl || typeof EventSource === 'undefined') return;
-    const badge=document.getElementById('sseStatus');
     const source=new EventSource(live.streamUrl);
-
-    source.onopen=()=>{if(badge) badge.textContent='En vivo';};
-    source.onerror=()=>{if(badge) badge.textContent='Reconectando…';};
     source.onmessage=(event)=>{
       let data;
       try{data=JSON.parse(event.data);}catch(_err){return;}
-      if(data.tipo==='lecturas') handleReading(data);
       if(data.tipo==='estado') setDeviceState(data.en_linea,data.valvula);
     };
-
     window.addEventListener('beforeunload',()=>source.close());
+  }
+
+  // Consulta cada 3 segundos las lecturas persistidas por MQTT en PostgreSQL.
+  // Usa el mismo endpoint /api/lecturas que ya se comprobó en producción.
+  async function refreshLiveReadings(){
+    if(readingPollingInProgress || !liveFlowChart) return;
+    readingPollingInProgress=true;
+    const badge=document.getElementById('sseStatus');
+    try{
+      const response=await fetch('/api/lecturas',{cache:'no-store'});
+      if(!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result=await response.json();
+      const readings=Array.isArray(result.readings)?result.readings:[];
+      if(!readings.length){
+        if(badge) badge.textContent='Sin lecturas';
+        return;
+      }
+
+      const points=readings.slice(0,30).reverse();
+      liveFlowChart.data.labels=points.map(r=>
+        new Date(r.recorded_at).toLocaleTimeString('es-CO',{
+          hour:'2-digit',minute:'2-digit',second:'2-digit'
+        })
+      );
+      liveFlowChart.data.datasets[0].data=points.map(r=>Number(r.flow_l_min));
+      liveFlowChart.update('none');
+
+      const latest=points[points.length-1];
+
+      // Mantiene actualizado el indicador de litros del día sin sumar
+      // repetidamente las mismas lecturas en cada consulta.
+      const ids=readings.map(r=>Number(r.id)).filter(Number.isFinite);
+      const maxId=ids.length?Math.max(...ids):null;
+      if(lastSeenReadingId === null){
+        lastSeenReadingId=maxId;
+        lastReadingDate=String(latest.recorded_at).slice(0,10);
+      }else if(maxId !== null){
+        const news=readings.filter(r=>Number(r.id)>lastSeenReadingId)
+          .sort((a,b)=>Number(a.id)-Number(b.id));
+        for(const r of news){
+          const day=String(r.recorded_at).slice(0,10);
+          if(day!==lastReadingDate){
+            lastReadingDate=day;
+            todayLiters=0;
+          }
+          todayLiters+=Number(r.volume_liters)||0;
+        }
+        if(news.length){
+          const todayEl=document.getElementById('todayLitersValue');
+          if(todayEl) todayEl.textContent=`${todayLiters.toFixed(2)} L`;
+        }
+        lastSeenReadingId=Math.max(lastSeenReadingId,maxId);
+      }
+
+      const flowEl=document.getElementById('liveFlowValue');
+      if(flowEl) flowEl.textContent=`${Number(latest.flow_l_min).toFixed(2)} L/min`;
+      if(badge) badge.textContent='Actualización cada 3 s';
+    }catch(error){
+      if(badge) badge.textContent='Reconectando…';
+      console.error('[AquaHogar] Error consultando lecturas:',error);
+    }finally{
+      readingPollingInProgress=false;
+    }
+  }
+
+  function setupReadingPolling(){
+    if(!liveFlowChart) return;
+    refreshLiveReadings();
+    readingPollingTimer=window.setInterval(refreshLiveReadings,3000);
+    window.addEventListener('beforeunload',()=>{
+      window.clearInterval(readingPollingTimer);
+    });
   }
 
   window.addEventListener('DOMContentLoaded',()=>{
@@ -156,5 +216,6 @@
     buildLiveChart();
     setDeviceState(live?.sensorOnline,live?.valveState);
     setupLiveStream();
+    setupReadingPolling();
   });
 })();
