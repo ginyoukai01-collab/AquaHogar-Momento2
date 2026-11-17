@@ -176,7 +176,7 @@ def main():
     try:
         while MAX_STEPS <= 0 or steps < MAX_STEPS:
             flow = realistic_flow(simulated_time)
-            volume = round(flow * (STEP_MINUTES / 60), 3)
+            volume = round(flow * STEP_MINUTES, 3)
             payload = {
                 "caudal_lpm": flow,
                 "volumen_l": volume,
